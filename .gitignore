@@ -1,0 +1,28 @@
+# Executáveis
+*.exe
+*.exe~
+jogo
+jogo.exe
+
+# Arquivos de dependências Go (opcionais)
+go.sum
+go.mod
+
+
+# Arquivos temporários
+*.tmp
+*.log
+
+# Arquivos específicos do sistema
+.DS_Store
+Thumbs.db
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Arquivos de build
+dist/
+build/
