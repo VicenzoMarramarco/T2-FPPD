@@ -32,6 +32,8 @@ type Jogo struct {
 	PlayerCollects    chan PlayerCollect
 	StarCommands      chan StarCommand
 	MapMutex          chan chan bool
+	RemotePlayers     map[string]RemotePlayer // outros jogadores
+	SelfID            string                  // id do jogador local (para não duplicar)
 }
 
 // Elementos visuais do jogo
@@ -61,6 +63,7 @@ func jogoNovo() Jogo {
 		PlayerCollects: make(chan PlayerCollect, 10),
 		StarCommands:   make(chan StarCommand, 10),
 		MapMutex:       make(chan chan bool, 1),
+		RemotePlayers:  make(map[string]RemotePlayer),
 	}
 }
 
@@ -110,6 +113,50 @@ func jogoCarregarMapa(nome string, jogo *Jogo) error {
 	}
 	if err := scanner.Err(); err != nil {
 		return err
+	}
+	return nil
+}
+
+// Constrói o mapa a partir de linhas de texto fornecidas pelo servidor
+func jogoCarregarMapaDeLinhas(linhas []string, jogo *Jogo) error {
+	jogo.Mapa = nil
+	jogo.Monstro = nil
+	jogo.InvisibilityItems = nil
+	y := 0
+	for _, linha := range linhas {
+		var linhaElems []Elemento
+		for x, ch := range linha {
+			e := Vazio
+			switch ch {
+			case Parede.simbolo:
+				e = Parede
+			case Inimigo.simbolo:
+				e = Vazio
+				if jogo.Monstro == nil {
+					jogo.Monstro = &Monster{
+						current_position: Position{X: x, Y: y},
+						state:            Patrolling,
+						destiny_position: Position{X: x + 5, Y: y + 5},
+						id:               "monster_1",
+					}
+				}
+			case Vegetacao.simbolo:
+				e = Vegetacao
+			case InvisibilityItem.simbolo:
+				e = InvisibilityItem
+				invisItem := &Invisibility{X: x, Y: y}
+				jogo.InvisibilityItems = append(jogo.InvisibilityItems, invisItem)
+			case '★':
+				e = StarElementVisible
+			case Personagem.simbolo:
+				// Quando carregando mapa recebido do servidor, não reposiciona o jogador local.
+				// Trata como espaço vazio para evitar "teleporte" para a posição inicial.
+				e = Vazio
+			}
+			linhaElems = append(linhaElems, e)
+		}
+		jogo.Mapa = append(jogo.Mapa, linhaElems)
+		y++
 	}
 	return nil
 }
@@ -196,7 +243,11 @@ func jogoTratarEvento(jogo *Jogo, event GameEvent) {
 // Notifica o client.go via TCP
 func jogoEnviarEstadoJogador(jogo *Jogo) {
 	go func(x, y int) {
-		conn, err := net.DialTimeout("tcp", "127.0.0.1:4000", 200*time.Millisecond)
+		addr := os.Getenv("GAME_CMD_ADDR")
+		if addr == "" {
+			addr = "127.0.0.1:4000"
+		}
+		conn, err := net.DialTimeout("tcp", addr, 200*time.Millisecond)
 		if err != nil {
 			return
 		}

@@ -4,8 +4,10 @@ package server
 import (
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"net/rpc"
+	"os"
 	"sync"
 	"time"
 
@@ -20,15 +22,69 @@ type GameServer struct {
 	lastSeq map[string]uint64             // clientID -> last applied sequence number
 	names   map[string]string             // clientID -> name
 	nextID  uint64
+
+	mapLines []string // authoritative map as lines
+}
+
+// loadMapLines loads a text map file into a slice of strings.
+func loadMapLines(path string) ([]string, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	buf := make([]byte, 0, 4096)
+	tmp := make([]byte, 1024)
+	for {
+		n, er := f.Read(tmp)
+		if n > 0 {
+			buf = append(buf, tmp[:n]...)
+		}
+		if er == io.EOF {
+			break
+		}
+		if er != nil {
+			return nil, er
+		}
+	}
+	// split on \n preserving contents without trailing \r
+	lines := []string{}
+	start := 0
+	for i := 0; i < len(buf); i++ {
+		if buf[i] == '\n' {
+			line := string(buf[start:i])
+			if len(line) > 0 && line[len(line)-1] == '\r' {
+				line = line[:len(line)-1]
+			}
+			lines = append(lines, line)
+			start = i + 1
+		}
+	}
+	if start <= len(buf)-1 {
+		line := string(buf[start:])
+		if len(line) > 0 && line[len(line)-1] == '\r' {
+			line = line[:len(line)-1]
+		}
+		if len(line) > 0 {
+			lines = append(lines, line)
+		}
+	}
+	return lines, nil
 }
 
 func NewGameServer() *GameServer {
-	return &GameServer{
-		players: make(map[string]shared.PlayerState),
-		lastSeq: make(map[string]uint64),
-		names:   make(map[string]string),
-		nextID:  1,
+	gs := &GameServer{
+		players:  make(map[string]shared.PlayerState),
+		lastSeq:  make(map[string]uint64),
+		names:    make(map[string]string),
+		nextID:   1,
+		mapLines: nil,
 	}
+	// Try to load map from local file (mapa.txt); non-fatal if missing
+	if lines, err := loadMapLines("mapa.txt"); err == nil {
+		gs.mapLines = lines
+	}
+	return gs
 }
 
 // Register: client pede um clientID
@@ -92,6 +148,7 @@ func (gs *GameServer) GetState(args shared.GetStateArgs, reply *shared.GameState
 	}
 	reply.Players = players
 	reply.Time = time.Now()
+	reply.MapLines = gs.mapLines
 
 	fmt.Printf("[SERVER] GetState requested by %s -> %d players returned\n", args.ClientID, len(players))
 	return nil

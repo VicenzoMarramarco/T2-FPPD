@@ -6,7 +6,6 @@ import (
 
 // Declaração da função existente em outro arquivo
 
-
 // Define um tipo Cor para encapsuladar as cores do termbox
 type Cor = termbox.Attribute
 
@@ -16,6 +15,7 @@ const (
 	CorCinzaEscuro     = termbox.ColorDarkGray
 	CorVermelho        = termbox.ColorRed
 	CorVerde           = termbox.ColorGreen
+	CorCiano           = termbox.ColorCyan
 	CorParede          = termbox.ColorBlack | termbox.AttrBold | termbox.AttrDim
 	CorFundoParede     = termbox.ColorDarkGray
 	CorTexto           = termbox.ColorDarkGray
@@ -24,8 +24,8 @@ const (
 
 // EventoTeclado representa uma ação detectada do teclado (como mover, sair ou interagir)
 type EventoTeclado struct {
-	Tipo  string 
-	Tecla rune 
+	Tipo  string
+	Tecla rune
 }
 
 // Inicializa a interface gráfica usando termbox
@@ -39,9 +39,6 @@ func interfaceIniciar() {
 func interfaceFinalizar() {
 	termbox.Close()
 }
-
-
-
 
 // Lê um evento do teclado e o traduz para um EventoTeclado
 func interfaceLerEventoTeclado() EventoTeclado {
@@ -72,13 +69,22 @@ func interfaceDesenharJogo(jogo *Jogo) {
 	// Desenha o personagem sobre o mapa
 	interfaceDesenharElemento(jogo.PosX, jogo.PosY, jogo.elementoJogador())
 
+	// Desenha outros jogadores recebidos do servidor
+	outro := Elemento{'☺', CorCiano, CorPadrao, true}
+	for id, rp := range jogo.RemotePlayers {
+		if id == jogo.SelfID {
+			// não desenha a si mesmo (já desenhado localmente)
+			continue
+		}
+		interfaceDesenharElemento(rp.X, rp.Y, outro)
+	}
+
 	// Desenha o monstro se existir
 	if jogo.Monstro != nil {
 		interfaceDesenharElemento(jogo.Monstro.current_position.X, jogo.Monstro.current_position.Y, Inimigo)
 	}
 
-	
-// Desenha as estrelas
+	// Desenha as estrelas
 	for _, star := range jogo.Stars {
 		if star.IsVisible {
 			starElement := jogoGetStarElement(star)
@@ -144,26 +150,24 @@ func interfaceLerEventoTecladoAsync() <-chan EventoTeclado {
 		}
 	}()
 	return ch
-	
+
 }
-
-
 
 // jogoGetStarElement returns visual Elemento for a Star based on its state.
 func jogoGetStarElement(star *Star) Elemento {
-    if star == nil {
-        return Vazio
-    }
-    switch star.State {
-    case StarVisible:
-        return StarElementVisible
-    case StarInvisible:
-        return StarElementInvisible
-    case StarPulsing:
-        return StarElementPulsing
-    case StarCharging:
-        return StarElementCharging
-    default:
-        return StarElementVisible
-    }
+	if star == nil {
+		return Vazio
+	}
+	switch star.State {
+	case StarVisible:
+		return StarElementVisible
+	case StarInvisible:
+		return StarElementInvisible
+	case StarPulsing:
+		return StarElementPulsing
+	case StarCharging:
+		return StarElementCharging
+	default:
+		return StarElementVisible
+	}
 }

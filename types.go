@@ -9,8 +9,8 @@ type Position struct {
 type MonsterState int
 
 const (
-	Hunting    MonsterState = iota 
-	Patrolling                 
+	Hunting MonsterState = iota
+	Patrolling
 )
 
 // Structs dos elementos especiais
@@ -32,23 +32,31 @@ type Invisibility struct {
 }
 
 type GameEvent struct {
-	Type string      
+	Type string
 	Data interface{}
 }
 
 type MonsterMoveData struct {
-	OldX, OldY int    
-	NewX, NewY int    
-	MonsterID  string 
+	OldX, OldY int
+	NewX, NewY int
+	MonsterID  string
 }
 
 type PlayerAlert struct {
-	Type string     
-	Data interface{} 
+	Type string
+	Data interface{}
 }
 
 type PlayerState struct {
-	X, Y int 
+	X, Y int
+}
+
+// Representa um jogador remoto renderizado no mapa
+type RemotePlayer struct {
+	ID   string
+	Name string
+	X    int
+	Y    int
 }
 
 type PlayerCollect struct {

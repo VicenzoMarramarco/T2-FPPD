@@ -25,10 +25,15 @@ type Client struct {
 
 	x, y int
 	seq  uint64
+
+	// local state broadcaster
+	subsMu  sync.Mutex
+	subs    map[net.Conn]struct{}
+	stateLn net.Listener
 }
 
 func NewClient(name string, rpcAddr string) (*Client, error) {
-	c := &Client{name: name, x: 0, y: 0, seq: 0}
+	c := &Client{name: name, x: 0, y: 0, seq: 0, subs: make(map[net.Conn]struct{})}
 	conn, err := rpc.Dial("tcp", rpcAddr)
 	if err != nil {
 		return nil, err
@@ -78,6 +83,8 @@ func (c *Client) StartPolling() {
 				for _, p := range gs.Players {
 					fmt.Printf("   -> %s (%s): (%d,%d)\n", p.ID, p.Name, p.X, p.Y)
 				}
+				// broadcast to local UI listeners
+				c.broadcastState(gs)
 			}
 			time.Sleep(500 * time.Millisecond)
 		}
@@ -85,12 +92,12 @@ func (c *Client) StartPolling() {
 }
 
 // listener local para receber comandos do jogo (jogo.exe/jogo.go)
-func (c *Client) StartLocalCommandListener() error {
-	ln, err := net.Listen("tcp", "127.0.0.1:4000")
+func (c *Client) StartLocalCommandListener(addr string) error {
+	ln, err := net.Listen("tcp", addr)
 	if err != nil {
 		return err
 	}
-	fmt.Println("[CLIENT] Local command listener running on 127.0.0.1:4000")
+	fmt.Printf("[CLIENT %s] Local command listener running on %s\n", c.name, addr)
 	go func() {
 		for {
 			conn, err := ln.Accept()
@@ -201,4 +208,79 @@ func StartPositionReporter(posCh <-chan [2]int, clientID string, serverAddr stri
 			}
 		}
 	}()
+}
+
+// StartLocalStateBroadcaster starts a TCP server to stream game state locally to the UI.
+func (c *Client) StartLocalStateBroadcaster(addr string) error {
+	ln, err := net.Listen("tcp", addr)
+	if err != nil {
+		return err
+	}
+	c.stateLn = ln
+	fmt.Printf("[CLIENT %s] Local state broadcaster on %s\n", c.name, addr)
+	go func() {
+		for {
+			conn, err := ln.Accept()
+			if err != nil {
+				return
+			}
+			c.subsMu.Lock()
+			c.subs[conn] = struct{}{}
+			c.subsMu.Unlock()
+			go c.handleSub(conn)
+		}
+	}()
+	return nil
+}
+
+func (c *Client) handleSub(conn net.Conn) {
+	defer func() {
+		c.subsMu.Lock()
+		delete(c.subs, conn)
+		c.subsMu.Unlock()
+		conn.Close()
+	}()
+	// keep the connection open until closed by peer
+	buf := make([]byte, 1)
+	for {
+		conn.SetReadDeadline(time.Now().Add(5 * time.Minute))
+		if _, err := conn.Read(buf); err != nil {
+			return
+		}
+	}
+}
+
+func (c *Client) broadcastState(gs shared.GameState) {
+	c.subsMu.Lock()
+	defer c.subsMu.Unlock()
+	if len(c.subs) == 0 {
+		return
+	}
+	// Build message
+	var b strings.Builder
+	fmt.Fprintf(&b, "SELF %s\n", c.clientID)
+	if n := len(gs.MapLines); n > 0 {
+		fmt.Fprintf(&b, "MAP %d\n", n)
+		for _, line := range gs.MapLines {
+			b.WriteString(line)
+			b.WriteByte('\n')
+		}
+	} else {
+		b.WriteString("MAP 0\n")
+	}
+	fmt.Fprintf(&b, "PLAYERS %d\n", len(gs.Players))
+	for _, p := range gs.Players {
+		fmt.Fprintf(&b, "%s\t%s\t%d\t%d\n", p.ID, p.Name, p.X, p.Y)
+	}
+	b.WriteString("END\n")
+	msg := b.String()
+	// Send to all subs, remove closed
+	for conn := range c.subs {
+		conn.SetWriteDeadline(time.Now().Add(100 * time.Millisecond))
+		if _, err := conn.Write([]byte(msg)); err != nil {
+			// drop
+			delete(c.subs, conn)
+			conn.Close()
+		}
+	}
 }

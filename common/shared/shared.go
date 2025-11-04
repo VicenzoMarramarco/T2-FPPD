@@ -39,4 +39,6 @@ type PlayerState struct {
 type GameState struct {
 	Players []PlayerState
 	Time    time.Time
+	// Optional: authoritative map provided by server as lines
+	MapLines []string
 }
