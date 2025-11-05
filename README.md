@@ -63,7 +63,7 @@ go run ./cmd/server
 
 Terminal 2 – Cliente RPC + listener local (recebe "MOVE x y" do jogo)
 ```powershell
-go run ./cmd/client --name "Player1" --addr "10.132.248.167:12345" --ui "127.0.0.1:4001" --listen "127.0.0.1:4000"```
+go run ./cmd/client --name "Player1" --addr "10.135.177.130:12345" --ui "127.0.0.1:4001" --listen "127.0.0.1:4000"
 ```
 
 Terminal 3 – Jogo (termbox)
@@ -75,7 +75,7 @@ go run .
 
 Terminal 4 – Cliente RPC + listener local (recebe "MOVE x y" do jogo)
 ```powershell
-go run ./cmd/client --name "Player2" --addr "10.132.248.167:12345" --ui "127.0.0.1:4002" --listen "127.0.0.1:4003"
+go run ./cmd/client --name "Player2" --addr "10.135.177.130:12345" --ui "127.0.0.1:4002" --listen "127.0.0.1:4003"
 ```
 
 Terminal 5 – Jogo (termbox)
